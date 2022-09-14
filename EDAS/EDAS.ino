@@ -4,9 +4,9 @@
 #include <SD.h>
 
 // Constants -------------------------------------------------------
-#define NEW_RUN_BUTTON 3
 #define LOGGING_BUTTON 2
-#define SD_PIN         4
+#define NEW_RUN_BUTTON 3
+#define WRITING_LED    4
 #define LCD_RS         22
 #define LCD_RW         23
 #define LCD_EN         24
@@ -16,9 +16,9 @@
 #define LCD_DB7        28
 
 // Configuration ---------------------------------------------------
-const int BAD_DATA_HOLD_TIME = 3000;
+const int BAD_DATA_HOLD_TIME = 2000;
 const int BUTTON_DEBOUNCE_TIME = 100;
-const String CODE_VERSION = "0.1.0";
+const String CODE_VERSION = "0.1.5";
 
 // Variables -------------------------------------------------------
 LiquidCrystal lcd(LCD_RS, LCD_RW, LCD_EN, LCD_DB4, LCD_DB5, LCD_DB6, LCD_DB7);
@@ -29,6 +29,8 @@ bool loggingButtonPressedDown = false;
 int newRunButtonLastPressTime = 0;
 int loggingButtonLastPressTime = 0;
 int newRunButtonHoldInitialTime = 0;
+long lastMillis;
+int ticks = 0;
 int runIndex = 0;
 File runFile;
 
@@ -38,13 +40,14 @@ void setup() {
   Serial.begin(9600);
 
   // SD setup
-  SD.begin(SD_PIN);
+  //SD.begin(SD_PIN);
 
   // LCD setup
   lcd.begin(16, 2);
   lcd.noAutoscroll();
 
   // Pin setup
+  pinMode(WRITING_LED, OUTPUT);
   pinMode(LOGGING_BUTTON, INPUT);
   pinMode(NEW_RUN_BUTTON, INPUT);
 
@@ -53,8 +56,8 @@ void setup() {
   lcd.setCursor(0, 0);
   lcd.write("HELLO, BAJA");
 
-  char versionLabel[14];
-  snprintf(versionLabel, 14, "VERSION %s", CODE_VERSION);
+  char versionLabel[16];
+  snprintf(versionLabel, 16, "VERSION %s", CODE_VERSION);
   lcd.setCursor(0, 1);
   lcd.write(versionLabel);
   
@@ -82,6 +85,13 @@ void setup() {
 }
 
 void loop() {
+  // This clock fixes the issues with millis causing
+  // logic errors due to being a long
+  if (lastMillis != millis()){
+     ticks++;
+     lastMillis = millis(); 
+  }
+  
   // Bail if files are being copied
   if (copyingFiles)
     return;
@@ -93,46 +103,56 @@ void loop() {
   // New run button
   if (newRunButtonPressed() && !newRunButtonPressedDown){         // !NEW RUN BUTTON DOWN!
     // Button debounce
-    if (millis() - newRunButtonLastPressTime < BUTTON_DEBOUNCE_TIME)
+    if (ticks - newRunButtonLastPressTime < BUTTON_DEBOUNCE_TIME)
       return;
-    newRunButtonLastPressTime = millis();
+    newRunButtonLastPressTime = ticks;
     
     newRunButtonPressedDown = true;
-    newRunButtonHoldInitialTime = millis();
+    newRunButtonHoldInitialTime = ticks;
   }
   else if (!newRunButtonPressed() && newRunButtonPressedDown){    // !NEW RUN BUTTON UP!
     // Button debounce
-    if (millis() - newRunButtonLastPressTime < BUTTON_DEBOUNCE_TIME)
+    if (ticks - newRunButtonLastPressTime < BUTTON_DEBOUNCE_TIME)
       return;
-    newRunButtonLastPressTime = millis();
+    newRunButtonLastPressTime = ticks;
     
     newRunButtonPressedDown = false;
     startNewRun(false);
   }
 
+  if (ticks - newRunButtonLastPressTime >= BUTTON_DEBOUNCE_TIME)
+    newRunButtonLastPressTime = ticks;
+
   if (newRunButtonPressed() && newRunButtonPressedDown){          // !NEW RUN BUTTON HELD DOWN!
-    if (millis() - newRunButtonHoldInitialTime > BAD_DATA_HOLD_TIME)
+    if (ticks - newRunButtonHoldInitialTime > BAD_DATA_HOLD_TIME){
       startNewRun(true);
+      newRunButtonPressedDown = false;
+    }
   }
+  else
+    newRunButtonHoldInitialTime = ticks;
 
   // Logging button
   if (loggingButtonPressed() && !loggingButtonPressedDown){       // !LOGGING BUTTON DOWN!
     // Button debounce
-    if (millis() - loggingButtonLastPressTime < BUTTON_DEBOUNCE_TIME)
+    if (ticks - loggingButtonLastPressTime < BUTTON_DEBOUNCE_TIME)
       return;
-    loggingButtonLastPressTime = millis();
+    loggingButtonLastPressTime = ticks;
     
     loggingButtonPressedDown = true;
   }
   else if (!loggingButtonPressed() && loggingButtonPressedDown){  // !LOGGING BUTTON UP!
     // Button debounce
-    if (millis() - loggingButtonLastPressTime < BUTTON_DEBOUNCE_TIME)
+    if (ticks - loggingButtonLastPressTime < BUTTON_DEBOUNCE_TIME)
       return;
-    loggingButtonLastPressTime = millis();
+    loggingButtonLastPressTime = ticks;
     
     loggingButtonPressedDown = false;
     toggleDataCollection();
   }
+
+  if (ticks - loggingButtonLastPressTime >= BUTTON_DEBOUNCE_TIME)
+    loggingButtonLastPressTime = ticks;
 }
 
 // New run button toggles next run or marks a run as bad data
@@ -148,11 +168,23 @@ bool loggingButtonPressed(){
 // Pauses/unpauses the data collection
 void toggleDataCollection(){
   dataCollectionPaused = !dataCollectionPaused;
+  drawRunScreen();
+
+  // Status LED
+  digitalWrite(WRITING_LED, dataCollectionPaused ? LOW : HIGH);
+}
+
+void toggleDataCollection(bool set){
+  dataCollectionPaused = set;
+  drawRunScreen();
+
+    // Status LED
+  digitalWrite(WRITING_LED, dataCollectionPaused ? LOW : HIGH);
 }
 
 // Pauses data collection and starts a new run
 void startNewRun(bool markBadData){
-  dataCollectionPaused = true;
+  toggleDataCollection(true);
   
 //if (runFile){
     if (markBadData){
@@ -205,8 +237,8 @@ void drawRunScreen(){
 
   // Draw logging status
   char *pauseLabel = (dataCollectionPaused) 
-    ? "LOGGING OFF" 
-    : "LOGGING ON";
+    ? "LOGGING....READY" 
+    : "LOGGING..WRITING";
 
   lcd.setCursor(0, 1);
   lcd.write(pauseLabel);
