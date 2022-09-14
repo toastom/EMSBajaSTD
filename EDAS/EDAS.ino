@@ -111,16 +111,16 @@ void loop() {
   }
   
   // New run button
-  if (newRunButtonPressed() && !newRunButtonIsPressedDown){         // !NEW RUN BUTTON DOWN!
+  if (newRunButtonPressed() && !newRunButtonIsPressedDown){         
     newRunButtonIsPressedDown = true;
     newRunButtonHoldInitialTime = ticks;
   }
-  else if (!newRunButtonPressed() && newRunButtonIsPressedDown){    // !NEW RUN BUTTON UP!
+  else if (!newRunButtonPressed() && newRunButtonIsPressedDown){    
     newRunButtonIsPressedDown = false;
     startNewRun(false);
   }
 
-  if (newRunButtonPressed() && newRunButtonIsPressedDown){          // !NEW RUN BUTTON HELD DOWN!
+  if (newRunButtonPressed() && newRunButtonIsPressedDown){          
     if (ticks - newRunButtonHoldInitialTime > BAD_DATA_HOLD_TIME){
       startNewRun(true);
       newRunButtonIsPressedDown = false;
@@ -130,10 +130,12 @@ void loop() {
     newRunButtonHoldInitialTime = ticks;
 
   // Logging button
-  if (loggingButtonPressed() && !loggingButtonIsPressedDown){       // !LOGGING BUTTON DOWN!
+  // IN THE FUTURE, THIS WILL BE DELETED BECAUSE THE LOGGING BUTTON
+  // WILL BECOME A PHYSICAL SWITCH
+  if (loggingButtonPressed() && !loggingButtonIsPressedDown){
     loggingButtonIsPressedDown = true;
   }
-  else if (!loggingButtonPressed() && loggingButtonIsPressedDown){  // !LOGGING BUTTON UP!
+  else if (!loggingButtonPressed() && loggingButtonIsPressedDown){
     loggingButtonIsPressedDown = false;
     toggleDataCollection();
   }
