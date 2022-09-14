@@ -18,7 +18,7 @@
 // Configuration ---------------------------------------------------
 const int BAD_DATA_HOLD_TIME = 2000;
 const int BUTTON_DEBOUNCE_TIME = 100;
-const String CODE_VERSION = "0.1.5";
+const char *CODE_VERSION = "0.1.5";
 
 // Variables -------------------------------------------------------
 LiquidCrystal lcd(LCD_RS, LCD_RW, LCD_EN, LCD_DB4, LCD_DB5, LCD_DB6, LCD_DB7);
