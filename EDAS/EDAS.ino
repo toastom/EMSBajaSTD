@@ -28,10 +28,8 @@ bool dataCollectionPaused = false;
 bool copyingFiles = false;
 bool newRunButtonIsPressedDown = false;
 bool loggingButtonIsPressedDown = false;
-int newRunButtonHoldInitialTime = 0;
-long lastMillis;
-int ticks = 0;
 int runIndex = 0;
+unsigned long newRunButtonHoldInitialTime = 0;
 File runFile;
 
 // Code ------------------------------------------------------------
@@ -91,19 +89,7 @@ void setup() {
 }
 
 void loop() {
-  // Bail the loop if an error was encountered
-  if (errorEncountered)
-    return;
-  
-  // This clock fixes the issues with millis causing
-  // logic errors due to being a long
-  if (lastMillis != millis()){
-     ticks++;
-     lastMillis = millis(); 
-  }
-  
-  // Bail if files are being copied
-  if (copyingFiles)
+  if (errorEncountered || copyingFiles)
     return;
   
   if (!dataCollectionPaused){
@@ -113,7 +99,7 @@ void loop() {
   // New run button
   if (newRunButtonPressed() && !newRunButtonIsPressedDown){         
     newRunButtonIsPressedDown = true;
-    newRunButtonHoldInitialTime = ticks;
+    newRunButtonHoldInitialTime = millis();
   }
   else if (!newRunButtonPressed() && newRunButtonIsPressedDown){    
     newRunButtonIsPressedDown = false;
@@ -121,13 +107,11 @@ void loop() {
   }
 
   if (newRunButtonPressed() && newRunButtonIsPressedDown){          
-    if (ticks - newRunButtonHoldInitialTime > BAD_DATA_HOLD_TIME){
+    if (millis() - newRunButtonHoldInitialTime > BAD_DATA_HOLD_TIME){
       startNewRun(true);
       newRunButtonIsPressedDown = false;
     }
   }
-  else
-    newRunButtonHoldInitialTime = ticks;
 
   // Logging button
   // IN THE FUTURE, THIS WILL BE DELETED BECAUSE THE LOGGING BUTTON
