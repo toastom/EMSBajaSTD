@@ -24,8 +24,8 @@ const char *CODE_VERSION = "0.1.5";
 // Variables -------------------------------------------------------
 LiquidCrystal lcd(LCD_RS, LCD_RW, LCD_EN, LCD_DB4, LCD_DB5, LCD_DB6, LCD_DB7);
 bool errorEncountered = false;
-bool dataCollectionPaused = false;
 bool copyingFiles = false;
+bool collectingData = false;
 bool newRunButtonIsPressedDown = false;
 bool loggingButtonIsPressedDown = false;
 int runIndex = 0;
@@ -92,8 +92,10 @@ void loop() {
   if (errorEncountered || copyingFiles)
     return;
   
-  if (!dataCollectionPaused){
-      // ADD FUNCTIONALITY: Collect data
+  if (collectingData){
+    // -----------------
+    // Collect data here
+    // -----------------
   }
   
   // New run button
@@ -137,24 +139,24 @@ bool loggingButtonPressed(){
 
 // Pauses/unpauses the data collection
 void toggleDataCollection(){
-  dataCollectionPaused = !dataCollectionPaused;
+  collectingData = !collectingData;
   drawRunScreen();
 
-  // Status LED
-  digitalWrite(WRITING_LED, dataCollectionPaused ? LOW : HIGH);
+// Status LED
+  digitalWrite(WRITING_LED, collectingData ? HIGH : LOW);
 }
 
 void toggleDataCollection(bool set){
-  dataCollectionPaused = set;
+  collectingData = set;
   drawRunScreen();
 
-    // Status LED
-  digitalWrite(WRITING_LED, dataCollectionPaused ? LOW : HIGH);
+  // Status LED
+  digitalWrite(WRITING_LED, collectingData ? HIGH : LOW);
 }
 
 // Pauses data collection and starts a new run
 void startNewRun(bool markBadData){
-  toggleDataCollection(true);
+  toggleDataCollection(false);
 
   if (markBadData){
       copyingFiles = true;
@@ -187,9 +189,9 @@ void drawRunScreen(){
   lcd.print(runLabel);
 
   // Draw logging status
-  char *pauseLabel = (dataCollectionPaused) 
-    ? "LOGGING....READY" 
-    : "LOGGING..WRITING";
+  char *pauseLabel = (collectingData) 
+    ? "LOGGING..WRITING" 
+    : "LOGGING....READY";
 
   lcd.setCursor(0, 1);
   lcd.print(pauseLabel);
