@@ -1,5 +1,6 @@
 // Libraries -------------------------------------------------------
 #include <LiquidCrystal.h>
+#include <RTClib.h>
 #include <SPI.h>
 #include <SD.h>
 
@@ -17,91 +18,114 @@
 #define LCD_DB7        28
 
 // Configuration ---------------------------------------------------
-const int BAD_DATA_HOLD_TIME = 2000;
-const int BUTTON_DEBOUNCE_TIME = 100;
-const char *CODE_VERSION = "0.1.5";
+const String  CODE_VERSION = "0.3.0";
+const String  FILE_EXTENSION = ".CSV";
+const int     BAD_DATA_HOLD_TIME = 2000;
+const int     BUTTON_DEBOUNCE_TIME = 100;
+
+// Devices ---------------------------------------------------------
+LiquidCrystal lcd(LCD_RS, LCD_RW, LCD_EN, LCD_DB4, LCD_DB5, LCD_DB6, LCD_DB7);
+RTC_PCF8523   rtc;
 
 // Variables -------------------------------------------------------
-LiquidCrystal lcd(LCD_RS, LCD_RW, LCD_EN, LCD_DB4, LCD_DB5, LCD_DB6, LCD_DB7);
-bool errorEncountered = false;
-bool copyingFiles = false;
-bool collectingData = false;
-bool newRunButtonIsPressedDown = false;
-bool loggingButtonIsPressedDown = false;
-int runIndex = 0;
-unsigned long newRunButtonHoldInitialTime = 0;
-File runFile;
+unsigned long currentMillis;
+unsigned long lastMillis;
+unsigned long newRunButtonHoldInitialTime;
+String        fileAddress;
+bool          copyingFiles;
+bool          collectingData;
+bool          newRunButtonIsPressedDown;
+bool          loggingButtonIsPressedDown;
+bool          criticalErrorDetected;
+File          runFile;
+int           sampleRate = 1;
+int           runIndex;
+int           lastSecond;
 
 // Code ------------------------------------------------------------
 void setup() {
   // Serial setup
   Serial.begin(9600);
 
-  // LCD setup
-  lcd.begin(16, 2);
-  lcd.noAutoscroll();
-
-  // SD setup
-  //bool sdCardInitialized = SD.begin(SD_PIN);
-  bool sdCardInitialized = true;
-  if (!sdCardInitialized){
-    errorEncountered = true;
-    
-    lcd.clear();
-    lcd.setCursor(0, 0);
-    lcd.print("SD ERROR:");
-    lcd.setCursor(0, 1);
-    lcd.print("NO CARD DETECTED");
-    return;
-  }
-
   // Pin setup
   pinMode(WRITING_LED, OUTPUT);
   pinMode(LOGGING_BUTTON, INPUT);
   pinMode(NEW_RUN_BUTTON, INPUT);
-
-  // Start up screen
-  lcd.clear();
-  lcd.setCursor(0, 0);
-  lcd.write("HELLO, BAJA");
-
-  char versionLabel[14];
-  snprintf(versionLabel, 14, "VERSION %s", CODE_VERSION);
-  lcd.setCursor(0, 1);
-  lcd.write(versionLabel);
   
+  // LCD setup
+  lcd.begin(16, 2);
+  lcd.noAutoscroll();
+
+  // Start up screen 
+  customDrawScreen("HELLO, BAJA", "VERSION " + String(CODE_VERSION));
   delay(2000);
 
-  // Get run index from last shut down
-  File current = SD.open("/").openNextFile();
-  runIndex = 0;
-
-  while (true){
-    if (!current){
-      startNewRun(false);
-      break;
-    }
-
-    runIndex++;
-    current.close();
-    current.openNextFile();
+  // Set the sample rate
+  if (!newRunButtonPressed()){
+    sampleRate = 1;
+    customDrawScreen("SAMPLE RATE:", "1000/SECOND..1MS");
   }
+  else{
+    sampleRate = 10;
+    customDrawScreen("SAMPLE RATE:", "100/SECOND..10MS");
+  }
+  delay(2000);
+
+  // SD initialization
+  bool sdCardInitialized = SD.begin(SD_PIN);
+  if (!sdCardInitialized){
+    customDrawScreen("SD ERROR:", "NO CARD DETECTED");
+
+    // Wait for SD to initialize
+    while(!SD.begin(SD_PIN));
+  }
+
+  // RTC initialization
+  bool rtcInitialized = rtc.begin();
+  if (!rtcInitialized){
+    customDrawScreen("RTC ERROR:", "NO RTC DETECTED");
+
+    // Wait for RTC to initialize
+    while(!rtc.begin());
+  }
+
+  if (!rtc.initialized() || rtc.lostPower()){
+    customDrawScreen("RTC ERROR:", "RTC LOST POWER");
+
+    // Set the rtc time to when the code was compiled
+    rtc.adjust(DateTime(F(__DATE__), F(__TIME__)));
+    rtc.start();
+
+    delay(2000);
+  }
+
+  // Cache file address
+  fetchAndCacheFileAddress();
+
+  // Start the first run
+  startNewRun(false);
 }
 
 void loop() {
-  if (errorEncountered || copyingFiles)
+  currentMillis = millis();
+  if (currentMillis - lastMillis < sampleRate || copyingFiles)
     return;
   
-  if (collectingData){
-    // -----------------
-    // Collect data here
-    // -----------------
+  if (collectingData && runFile){
+    runFile.print(currentMillis / 1000);
+    runFile.print(",");
+    
+    // Temporary "sensor" -------------
+    runFile.println(analogRead(A0));
+    // --------------------------------
+    
+    lastMillis = currentMillis;
   }
-  
+
   // New run button
   if (newRunButtonPressed() && !newRunButtonIsPressedDown){         
     newRunButtonIsPressedDown = true;
-    newRunButtonHoldInitialTime = millis();
+    newRunButtonHoldInitialTime = currentMillis;
   }
   else if (!newRunButtonPressed() && newRunButtonIsPressedDown){    
     newRunButtonIsPressedDown = false;
@@ -109,15 +133,13 @@ void loop() {
   }
 
   if (newRunButtonPressed() && newRunButtonIsPressedDown){          
-    if (millis() - newRunButtonHoldInitialTime > BAD_DATA_HOLD_TIME){
+    if (currentMillis - newRunButtonHoldInitialTime > BAD_DATA_HOLD_TIME){
       startNewRun(true);
       newRunButtonIsPressedDown = false;
     }
   }
 
   // Logging button
-  // IN THE FUTURE, THIS WILL BE DELETED BECAUSE THE LOGGING BUTTON
-  // WILL BECOME A PHYSICAL SWITCH
   if (loggingButtonPressed() && !loggingButtonIsPressedDown){
     loggingButtonIsPressedDown = true;
   }
@@ -125,36 +147,63 @@ void loop() {
     loggingButtonIsPressedDown = false;
     toggleDataCollection();
   }
+
+  if (lastSecond != currentMillis / 1000){
+    lastSecond = currentMillis / 1000;
+    drawRunScreen();
+  }
 }
 
-// New run button toggles next run or marks a run as bad data
 bool newRunButtonPressed(){
   return digitalRead(NEW_RUN_BUTTON) == 1;
 }
 
-// Logging button pauses and resumes data collection
 bool loggingButtonPressed(){
   return digitalRead(LOGGING_BUTTON) == 1;
 }
 
-// Pauses/unpauses the data collection
 void toggleDataCollection(){
-  collectingData = !collectingData;
-  drawRunScreen();
+  if (!collectingData){
+    if (!SD.exists(fileAddress))
+      SD.mkdir(fileAddress);
+    
+    runFile = SD.open(fileAddress + "RUN" + String(runIndex) + FILE_EXTENSION, FILE_WRITE);
+    
+    // Write headers if no data is present in the file
+    if (runFile.peek() == -1)
+      runFile.println("Seconds,String Pot");
+  }
+  else
+    runFile.close();
 
-// Status LED
+  collectingData = !collectingData;
+
+  // Refresh screen and status LED
+  drawRunScreen();
   digitalWrite(WRITING_LED, collectingData ? HIGH : LOW);
 }
 
 void toggleDataCollection(bool set){
+  if (set){
+    if (!SD.exists(fileAddress))
+      SD.mkdir(fileAddress);
+    
+    runFile = SD.open(fileAddress + "RUN" + String(runIndex) + FILE_EXTENSION, FILE_WRITE);
+    
+    // Write headers if no data is present in the file
+    if (runFile.peek() == -1)
+      runFile.println("Seconds,String Pot");
+  }
+  else
+    runFile.close();
+  
   collectingData = set;
-  drawRunScreen();
 
-  // Status LED
+  // Refresh screen and status LED
+  drawRunScreen();
   digitalWrite(WRITING_LED, collectingData ? HIGH : LOW);
 }
 
-// Pauses data collection and starts a new run
 void startNewRun(bool markBadData){
   toggleDataCollection(false);
 
@@ -175,11 +224,19 @@ void drawRunScreen(){
   lcd.clear();
 
   // Draw time
-  char timeLabel[9];
-  snprintf(timeLabel, 9, "%s:%s:%s", "12", "34", "56");
+  DateTime now = rtc.now();
 
+  String rtcHour = "0" + String(now.hour());
+  rtcHour = rtcHour.substring(rtcHour.length() - 2, 3);
+  
+  String rtcMinute = "0" + String(now.minute());
+  rtcMinute = rtcMinute.substring(rtcMinute.length() - 2, 3);
+
+  String rtcSecond = "0" + String(now.second());
+  rtcSecond = rtcSecond.substring(rtcSecond.length() - 2, 3);
+  
   lcd.setCursor(8, 0);
-  lcd.print(timeLabel);
+  lcd.print(rtcHour + ':' + rtcMinute + ':' + rtcSecond);
 
   // Draw run index
   char runLabel[8];
@@ -198,9 +255,45 @@ void drawRunScreen(){
 }
 
 void drawCopyScreen(){
+  customDrawScreen("TRASHING DATA", "PLEASE WAIT...");
+}
+
+void customDrawScreen(String top){
   lcd.clear();
   lcd.setCursor(0, 0);
-  lcd.print("TAGGING BAD DATA");
+  lcd.print(top);
+}
+
+void customDrawScreen(String top, String bottom){
+  lcd.clear();
+  lcd.setCursor(0, 0);
+  lcd.print(top);
   lcd.setCursor(0, 1);
-  lcd.print("DO N0T TURN OFF!");
+  lcd.print(bottom);
+}
+
+void fetchAndCacheFileAddress(){
+  DateTime now = rtc.now();
+
+  // Year, Month, Day
+  String rtcYear = String(now.year());
+  rtcYear = rtcYear.substring(2, 4);
+  
+  String rtcMonth = '0' + String(now.month());
+  rtcMonth = rtcMonth.substring(rtcMonth.length() - 2, 3);
+
+  String rtcDay = '0' + String(now.day());
+  rtcDay = rtcDay.substring(rtcDay.length() - 2, 3);
+
+  // Hour, Minute, Second
+  String rtcHour = '0' + String(now.hour());
+  rtcHour = rtcHour.substring(rtcHour.length() - 2, 3);
+  
+  String rtcMinute = '0' + String(now.minute());
+  rtcMinute = rtcMinute.substring(rtcMinute.length() - 2, 3);
+
+  String rtcSecond = '0' + String(now.second());
+  rtcSecond = rtcSecond.substring(rtcSecond.length() - 2, 3);
+  
+  fileAddress = rtcDay + '_' + rtcMonth + '_' + rtcYear + '/' + rtcHour + '_' + rtcMinute + '_' + rtcSecond + '/';
 }
