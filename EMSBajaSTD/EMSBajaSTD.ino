@@ -36,7 +36,7 @@ bool          copyingFiles;
 bool          collectingData;
 bool          newRunButtonIsPressedDown;
 bool          loggingButtonIsPressedDown;
-bool          criticalErrorDetected;
+bool          criticalError;
 File          runFile;
 int           sampleRate = 1;
 int           runIndex;
@@ -57,7 +57,7 @@ void setup() {
   lcd.noAutoscroll();
 
   // Start up screen 
-  customDrawScreen("HELLO, BAJA", "VERSION " + String(CODE_VERSION));
+  customDrawScreen("HELLO, EMS BAJA", "VERSION " + String(CODE_VERSION));
   delay(2000);
 
   // Set the sample rate
@@ -89,7 +89,7 @@ void setup() {
     while(!rtc.begin());
   }
 
-  if (!rtc.initialized() || rtc.lostPower()){
+  if (rtc.lostPower()){
     customDrawScreen("RTC ERROR:", "RTC LOST POWER");
 
     // Set the rtc time to when the code was compiled
@@ -108,7 +108,7 @@ void setup() {
 
 void loop() {
   currentMillis = millis();
-  if (currentMillis - lastMillis < sampleRate || copyingFiles)
+  if (currentMillis - lastMillis < sampleRate || copyingFiles || criticalError)
     return;
   
   if (collectingData && runFile){
@@ -168,6 +168,11 @@ void toggleDataCollection(){
       SD.mkdir(fileAddress);
     
     runFile = SD.open(fileAddress + "RUN" + String(runIndex) + FILE_EXTENSION, FILE_WRITE);
+
+    if (!runFile){
+      drawErrorScreen("SD ERROR:", "FAILED TO WRITE");
+      return;
+    }
     
     // Write headers if no data is present in the file
     if (runFile.peek() == -1)
@@ -189,6 +194,11 @@ void toggleDataCollection(bool set){
       SD.mkdir(fileAddress);
     
     runFile = SD.open(fileAddress + "RUN" + String(runIndex) + FILE_EXTENSION, FILE_WRITE);
+
+    if (!runFile){
+      drawErrorScreen("SD ERROR:", "FAILED TO WRITE");
+      return;
+    }
     
     // Write headers if no data is present in the file
     if (runFile.peek() == -1)
@@ -272,6 +282,17 @@ void customDrawScreen(String top, String bottom){
   lcd.print(bottom);
 }
 
+void drawErrorScreen(String top, String bottom){
+  toggleDataCollection(false);
+  criticalError = true;
+  
+  lcd.clear();
+  lcd.setCursor(0, 0);
+  lcd.print(top);
+  lcd.setCursor(0, 1);
+  lcd.print(bottom);
+}
+
 void fetchAndCacheFileAddress(){
   DateTime now = rtc.now();
 
@@ -295,5 +316,5 @@ void fetchAndCacheFileAddress(){
   String rtcSecond = '0' + String(now.second());
   rtcSecond = rtcSecond.substring(rtcSecond.length() - 2, 3);
   
-  fileAddress = rtcDay + '_' + rtcMonth + '_' + rtcYear + '/' + rtcHour + '_' + rtcMinute + '_' + rtcSecond + '/';
+  fileAddress = rtcMonth + '-' + rtcDay + '-' + rtcYear + '/' + rtcHour + '-' + rtcMinute + '-' + rtcSecond + '/';
 }
