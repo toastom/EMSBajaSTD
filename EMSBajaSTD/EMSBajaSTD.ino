@@ -18,17 +18,11 @@
 #define       LCD_DB7              28
 
 // Configuration ---------------------------------------------------
-<<<<<<< Updated upstream
-const String  CODE_VERSION = "0.3.0";
-const String  FILE_EXTENSION = ".CSV";
-const int     BAD_DATA_HOLD_TIME = 2000;
-=======
 const String  CODE_VERSION         = "0.3.7";
 const String  FILE_EXTENSION       = ".CSV";
 const String  TRASH_FOLDER_ADDRESS = "TRASH/";
 const String  RUN_FILE_HEADER      = "Time, A";
 const int     BAD_DATA_HOLD_TIME   = 2000;
->>>>>>> Stashed changes
 const int     BUTTON_DEBOUNCE_TIME = 100;
 const int     LCD_WIDTH            = 16;
 const int     LCD_HEIGHT           = 2;
@@ -84,8 +78,6 @@ void setup() {
   // SD initialization
   if (!sdCardMounted()){
     customDrawScreen("SD ERROR:", "NO CARD DETECTED");
-
-    // Wait for an SD card to be mounted
     while(!sdCardMounted());
   }
 
@@ -145,16 +137,13 @@ void setup() {
 
 void loop() {
   currentMillis = millis();
-  if (currentMillis - lastMillis < sampleRate || copyingFiles || criticalError)
+  if (currentMillis - lastMillis < sampleRate || copyingFiles)
     return;
   
   if (collectingData && runFile){
     runFile.print(initialMillisecondOfDay + currentMillis);
     runFile.print(',');
-    
-    // Temporary "sensor" -------------
     runFile.println(analogRead(A0));
-    // --------------------------------
     
     lastMillis = currentMillis;
   }
@@ -202,8 +191,6 @@ void startDataCollection(){
   // Verify an sd card is mounted
   if (!sdCardMounted()){
     customDrawScreen("SD ERROR:", "NO CARD DETECTED");
-
-    // Wait for an SD card to be mounted
     while(!sdCardMounted());
   }
 
@@ -227,6 +214,12 @@ void stopDataCollection(){
   if (!collectingData)
     return;
 
+  // Verify an sd card is mounted
+  if (!sdCardMounted()){
+    customDrawScreen("SD ERROR:", "NO CARD DETECTED");
+    while(!sdCardMounted());
+  }
+
   if (runFile)
     runFile.close();
   
@@ -237,23 +230,29 @@ void stopDataCollection(){
   digitalWrite(WRITING_LED, LOW);
 }
 
-<<<<<<< Updated upstream
-void startNewRun(bool markBadData){
-  toggleDataCollection(false);
-=======
 void startNewRun(bool trashLastRun){
+  // Verify an sd card is mounted
+  if (!sdCardMounted()){
+    customDrawScreen("SD ERROR:", "NO CARD DETECTED");
+    while(!sdCardMounted());
+  }
+
   stopDataCollection();
->>>>>>> Stashed changes
 
-  if (markBadData){
-      copyingFiles = true;
+  if (trashLastRun){
+    customDrawScreen("TRASHING DATA", "PLEASE WAIT...");
+    copyingFiles = true;
 
-<<<<<<< Updated upstream
-      drawCopyScreen();
-      delay(2000);
-  
-      copyingFiles = false;
-=======
+    // Create trash folder if not created already
+    if (!SD.exists(TRASH_FOLDER_ADDRESS + fileAddress))
+      SD.mkdir(TRASH_FOLDER_ADDRESS + fileAddress);
+
+    String currentRunFileAddress = fileAddress + "RUN" + String(runIndex) + FILE_EXTENSION;
+    String duplicateRunFileAddress = TRASH_FOLDER_ADDRESS + currentRunFileAddress;
+    
+    File currentRunFile = SD.open(currentRunFileAddress, FILE_READ);
+    File duplicateRunFile = SD.open(duplicateRunFileAddress, FILE_WRITE);
+
     size_t data;
     uint8_t buf[64];
     while ((data = currentRunFile.read(buf, sizeof(buf))) > 0) 
@@ -264,7 +263,6 @@ void startNewRun(bool trashLastRun){
     SD.remove(currentRunFileAddress);
 
     copyingFiles = false;
->>>>>>> Stashed changes
   }
 
   runIndex++;
@@ -305,16 +303,6 @@ void drawRunScreen(){
   lcd.print(pauseLabel);
 }
 
-void drawCopyScreen(){
-  customDrawScreen("TRASHING DATA", "PLEASE WAIT...");
-}
-
-void customDrawScreen(String top){
-  lcd.clear();
-  lcd.setCursor(0, 0);
-  lcd.print(top);
-}
-
 void customDrawScreen(String top, String bottom){
   lcd.clear();
   lcd.setCursor(0, 0);
@@ -333,4 +321,7 @@ bool loggingButtonPressed(){
 
 bool sdCardMounted(){
   return SD.begin(SD_SC);
+
+  customDrawScreen("SD ERROR:", "NO CARD DETECTED");
+  while(SD.begin(SD_SC));
 }
