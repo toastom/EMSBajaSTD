@@ -8,7 +8,7 @@
 #define       LOGGING_BUTTON       2
 #define       NEW_RUN_BUTTON       3
 #define       LOGGING_LED          4
-#define       HAULT_LED          5
+#define       HALT_LED             5
 #define       SD_SC                10
 #define       LCD_RS               22
 #define       LCD_RW               23
@@ -54,7 +54,7 @@ void setup() {
 
   // Pin setup
   pinMode(LOGGING_LED, OUTPUT);
-  pinMode(HAULT_LED, OUTPUT);
+  pinMode(HALT_LED, OUTPUT);
   pinMode(LOGGING_BUTTON, INPUT);
   pinMode(NEW_RUN_BUTTON, INPUT);
   
@@ -80,17 +80,17 @@ void setup() {
   // SD initialization
   if (!sdCardMounted()){
     customDrawScreen("SD ERROR:", "NO CARD DETECTED");
-    setHaultIndicatorLight(true);
+    setHaltIndicatorLight(true);
     while(!sdCardMounted());
-    setHaultIndicatorLight(false);
+    setHaltIndicatorLight(false);
   }
 
   // RTC initialization
   if (!rtc.begin()){
     customDrawScreen("RTC ERROR:", "NO RTC DETECTED");
-    setHaultIndicatorLight(true);
+    setHaltIndicatorLight(true);
     while(!rtc.begin());
-    setHaultIndicatorLight(false);
+    setHaltIndicatorLight(false);
   }
 
   if (rtc.lostPower()){
@@ -100,9 +100,9 @@ void setup() {
     rtc.adjust(DateTime(F(__DATE__), F(__TIME__)));
     rtc.start();
 
-    setHaultIndicatorLight(true);
+    setHaltIndicatorLight(true);
     delay(2000);
-    setHaultIndicatorLight(false);
+    setHaltIndicatorLight(false);
   }
 
   // Cache file address
@@ -197,9 +197,9 @@ void startDataCollection(){
   // Verify an sd card is mounted
   if (!sdCardMounted()){
     customDrawScreen("SD ERROR:", "NO CARD DETECTED");
-    setHaultIndicatorLight(true);
+    setHaltIndicatorLight(true);
     while(!sdCardMounted());
-    setHaultIndicatorLight(false);
+    setHaltIndicatorLight(false);
   }
 
   if (!SD.exists(fileAddress))
@@ -225,9 +225,9 @@ void stopDataCollection(){
   // Verify an sd card is mounted
   if (!sdCardMounted()){
     customDrawScreen("SD ERROR:", "NO CARD DETECTED");
-    setHaultIndicatorLight(true);
+    setHaltIndicatorLight(true);
     while(!sdCardMounted());
-    setHaultIndicatorLight(false);
+    setHaltIndicatorLight(false);
   }
 
   if (runFile)
@@ -244,16 +244,16 @@ void startNewRun(bool trashLastRun){
   // Verify an sd card is mounted
   if (!sdCardMounted()){
     customDrawScreen("SD ERROR:", "NO CARD DETECTED");
-    setHaultIndicatorLight(true);
+    setHaltIndicatorLight(true);
     while(!sdCardMounted());
-    setHaultIndicatorLight(false);
+    setHaltIndicatorLight(false);
   }
 
   stopDataCollection();
 
   if (trashLastRun){
     customDrawScreen("TRASHING DATA", "PLEASE WAIT...");
-    setHaultIndicatorLight(true);
+    setHaltIndicatorLight(true);
     copyingFiles = true;
 
     // Create trash folder if not created already
@@ -275,7 +275,7 @@ void startNewRun(bool trashLastRun){
     duplicateRunFile.close();
     SD.remove(currentRunFileAddress);
 
-    setHaultIndicatorLight(false);
+    setHaltIndicatorLight(false);
     copyingFiles = false;
   }
 
@@ -329,8 +329,8 @@ void setLoggingIndicatorLight(bool state){
   digitalWrite(LOGGING_LED, state ? HIGH : LOW);
 }
 
-void setHaultIndicatorLight(bool state){
-  digitalWrite(HAULT_LED, state ? HIGH : LOW);
+void setHaltIndicatorLight(bool state){
+  digitalWrite(HALT_LED, state ? HIGH : LOW);
 }
 
 bool newRunButtonPressed(){
