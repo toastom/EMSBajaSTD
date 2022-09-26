@@ -19,7 +19,7 @@
 #define       LCD_DB7              28
 
 // Configuration ---------------------------------------------------
-const String  CODE_VERSION         = "0.3.7";
+const String  CODE_VERSION         = "0.4.0";
 const String  FILE_EXTENSION       = ".CSV";
 const String  TRASH_FOLDER_ADDRESS = "TRASH/";
 const String  RUN_FILE_HEADER      = "Time, A";
