@@ -19,10 +19,10 @@
 #define       LCD_DB7              28
 
 // Configuration ---------------------------------------------------
-const String  CODE_VERSION         = "0.4.0";
+const String  CODE_VERSION         = "0.4.2";
 const String  FILE_EXTENSION       = ".CSV";
 const String  TRASH_FOLDER_ADDRESS = "TRASH/";
-const String  RUN_FILE_HEADER      = "Time, A";
+const String  RUN_FILE_HEADER      = "TIME ms, A";
 const int     BAD_DATA_HOLD_TIME   = 2000;
 const int     BUTTON_DEBOUNCE_TIME = 100;
 const int     LCD_WIDTH            = 16;
@@ -58,10 +58,6 @@ void setup() {
   pinMode(LOGGING_BUTTON, INPUT);
   pinMode(NEW_RUN_BUTTON, INPUT);
   
-  // LCD setup
-  lcd.begin(LCD_WIDTH, LCD_HEIGHT);
-  lcd.noAutoscroll();
-
   // Start up screen 
   customDrawScreen("HELLO, EMS BAJA", "VERSION " + CODE_VERSION);
   delay(2000);
@@ -286,41 +282,34 @@ void startNewRun(bool trashLastRun){
 }
 
 void drawRunScreen(){
-  lcd.clear();
+  lcd.begin(LCD_WIDTH, LCD_HEIGHT);
+
+  // Draw run index
+  lcd.setCursor(0, 0);
+  lcd.print("RUN " + String(runIndex));
 
   // Draw time
   DateTime now = rtc.now();
 
-  String rtcHour = "0" + String(now.hour());
+  String rtcHour = '0' + String(now.hour());
   rtcHour = rtcHour.substring(rtcHour.length() - 2, 3);
   
-  String rtcMinute = "0" + String(now.minute());
+  String rtcMinute = '0' + String(now.minute());
   rtcMinute = rtcMinute.substring(rtcMinute.length() - 2, 3);
 
-  String rtcSecond = "0" + String(now.second());
+  String rtcSecond = '0' + String(now.second());
   rtcSecond = rtcSecond.substring(rtcSecond.length() - 2, 3);
   
   lcd.setCursor(8, 0);
   lcd.print(rtcHour + ':' + rtcMinute + ':' + rtcSecond);
 
-  // Draw run index
-  char runLabel[8];
-  snprintf(runLabel, 8, "RUN %d", runIndex);
-
-  lcd.setCursor(0, 0);
-  lcd.print(runLabel);
-
   // Draw logging status
-  char *pauseLabel = (collectingData) 
-    ? "LOGGING..WRITING" 
-    : "LOGGING....READY";
-
   lcd.setCursor(0, 1);
-  lcd.print(pauseLabel);
+  lcd.print((collectingData) ? "LOGGING..WRITING" : "LOGGING....READY");
 }
 
 void customDrawScreen(String top, String bottom){
-  lcd.clear();
+  lcd.begin(LCD_WIDTH, LCD_HEIGHT);
   lcd.setCursor(0, 0);
   lcd.print(top);
   lcd.setCursor(0, 1);
