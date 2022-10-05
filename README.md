@@ -1,5 +1,5 @@
-# EDAS
-Eagle Data Aquisition System (name TBD)
+# EMS STD
+Eagle Motorsports Special Testing Device
 
 ### Background
 This repo holds the code and other resources for the Georgia Southern Eagle Motorsports Baja team's onboard testing device. This is a student-designed and built device used for on-vehicle testing of the Baja car.
