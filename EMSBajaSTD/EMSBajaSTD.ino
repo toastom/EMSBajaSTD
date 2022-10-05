@@ -1,3 +1,12 @@
+/*
+  Still very buggy but the logging switch is implemented using an interrupt now
+  KNOWN BUG: System (or at least the display) sometimes freezes after sometimes toggling logging on/off
+  KNOWN BUG: Random "SD CARD ERROR" out of nowhere, but no red error light to go with it. Reset is the only way to get rid of it
+
+  The new run button has yet to be swapped over to an interrupt. This might take some work.
+*/
+
+
 // Libraries -------------------------------------------------------
 #include <LiquidCrystal.h>
 #include <RTClib.h>
@@ -9,7 +18,7 @@
 #define       NEW_RUN_BUTTON       3
 #define       LOGGING_LED          4
 #define       HALT_LED             5
-#define       SD_SC                10
+#define       SD_CS                10
 #define       LCD_RS               22
 #define       LCD_RW               23
 #define       LCD_EN               24
@@ -40,7 +49,7 @@ unsigned long initialMillisecondOfDay;
 String        fileAddress;
 File          runFile;
 bool          copyingFiles;
-bool          collectingData;
+volatile bool collectingData = false;
 bool          newRunButtonIsPressedDown;
 bool          loggingButtonIsPressedDown;
 int           sampleRate;
@@ -50,20 +59,22 @@ int           runIndex;
 // Code ------------------------------------------------------------
 void setup() {
   // Serial setup
-  // Serial.begin(9600);
+  //Serial.begin(9600);
 
   // Pin setup
   pinMode(LOGGING_LED, OUTPUT);
   pinMode(HALT_LED, OUTPUT);
   pinMode(LOGGING_BUTTON, INPUT);
   pinMode(NEW_RUN_BUTTON, INPUT);
+  attachInterrupt(digitalPinToInterrupt(LOGGING_BUTTON), toggleLogging, CHANGE);
+  //attachInterrupt(digitalPinToInterrupt(NEW_RUN_BUTTON), newRun, FALLING);
   
   // Start up screen 
   customDrawScreen("HELLO, EMS BAJA", "VERSION " + CODE_VERSION);
   delay(2000);
 
   // Set the sample rate
-  if (!digitalRead(NEW_RUN_BUTTON)){
+  if (digitalRead(NEW_RUN_BUTTON)){
     sampleRate = 1;
     customDrawScreen("SAMPLE RATE:", "1000/SECOND..1MS");
   }
@@ -150,48 +161,22 @@ void loop() {
     lastMillis = currentMillis;
   }
 
-  bool newRunButtonPressed = digitalRead(NEW_RUN_BUTTON);
-  bool loggingButtonPressed = digitalRead(LOGGING_BUTTON);
-
-  // New run button
-  if (newRunButtonPressed && !newRunButtonIsPressedDown){         
-    newRunButtonIsPressedDown = true;
-    newRunButtonHoldInitialTime = currentMillis;
-  }
-  else if (!newRunButtonPressed && newRunButtonIsPressedDown){    
-    newRunButtonIsPressedDown = false;
-    startNewRun(false);
-  }
-
-  if (newRunButtonPressed && newRunButtonIsPressedDown){          
-    if (currentMillis - newRunButtonHoldInitialTime > BAD_DATA_HOLD_TIME){
-      startNewRun(true);
-      newRunButtonIsPressedDown = false;
-    }
-  }
-
-  // Logging button
-  if (loggingButtonPressed && !loggingButtonIsPressedDown)
-    loggingButtonIsPressedDown = true;
-  else if (!loggingButtonPressed && loggingButtonIsPressedDown){
-    loggingButtonIsPressedDown = false;
-    
-    if (!collectingData)
-      startDataCollection();
-    else
-      stopDataCollection();
-  }
-
   if (lastSecond != currentMillis / 1000){
     lastSecond = currentMillis / 1000;
     drawRunScreen();
   }
 }
 
-void startDataCollection(){
-  if (collectingData)
-    return;
+void toggleLogging(){
+  collectingData = !collectingData;
+  digitalWrite(LOGGING_LED, collectingData);
+  if(collectingData)
+    startDataCollection();
+  else
+    stopDataCollection();
+}
 
+void startDataCollection(){
   // Verify an sd card is mounted
   if (!sdCardMounted()){
     customDrawScreen("SD ERROR:", "NO CARD DETECTED");
@@ -208,18 +193,9 @@ void startDataCollection(){
   // Write headers if no data is present in the file
   if (runFile.peek() == -1)
     runFile.println(RUN_FILE_HEADER);
-  
-  collectingData = true;
-
-  // Refresh screen and status LED
-  drawRunScreen();
-  digitalWrite(LOGGING_LED, HIGH);
 }
 
 void stopDataCollection(){
-  if (!collectingData)
-    return;
-
   // Verify an sd card is mounted
   if (!sdCardMounted()){
     customDrawScreen("SD ERROR:", "NO CARD DETECTED");
@@ -230,12 +206,6 @@ void stopDataCollection(){
 
   if (runFile)
     runFile.close();
-  
-  collectingData = false;
-
-  // Refresh screen and status LED
-  drawRunScreen();
-  digitalWrite(LOGGING_LED, LOW);
 }
 
 void startNewRun(bool trashLastRun){
@@ -247,7 +217,8 @@ void startNewRun(bool trashLastRun){
     digitalWrite(HALT_LED, LOW);
   }
 
-  stopDataCollection();
+  if (runFile)
+    runFile.close();
 
   if (trashLastRun){
     customDrawScreen("TRASHING DATA", "PLEASE WAIT...");
@@ -266,7 +237,7 @@ void startNewRun(bool trashLastRun){
 
     size_t data;
     uint8_t buf[64];
-    while ((data = currentRunFile.read(buf, sizeof(buf))) > 0) 
+    while ((data = currentRunFile.read(buf, sizeof(buf))) > 0)
       duplicateRunFile.write(buf, data);
     
     currentRunFile.close();
@@ -317,7 +288,5 @@ void customDrawScreen(String top, String bottom){
 }
 
 bool sdCardMounted(){
-  return SD.begin(SD_SC);
-  customDrawScreen("SD ERROR:", "NO CARD DETECTED");
-  while(SD.begin(SD_SC));
+  return SD.begin(SD_CS);
 }
