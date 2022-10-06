@@ -28,7 +28,7 @@
 #define       LCD_DB7              28
 
 // Configuration ---------------------------------------------------
-const String  CODE_VERSION         = "0.4.2";
+const String  CODE_VERSION         = "0.4.5";
 const String  FILE_EXTENSION       = ".CSV";
 const String  TRASH_FOLDER_ADDRESS = "TRASH/";
 const String  RUN_FILE_HEADER      = "TIME ms, A";
@@ -52,6 +52,7 @@ bool          copyingFiles;
 volatile bool collectingData = false;
 bool          newRunButtonIsPressedDown;
 bool          loggingButtonIsPressedDown;
+bool          forceScreenDraw;
 int           sampleRate;
 int           lastSecond;
 int           runIndex;
@@ -150,30 +151,39 @@ void setup() {
 
 void loop() {
   currentMillis = millis();
-  if (currentMillis - lastMillis < sampleRate || copyingFiles)
-    return;
   
-  if (collectingData && runFile){
+  // Update clock every second
+  if (lastSecond != currentMillis / 1000 || forceScreenDraw){
+    lastSecond = currentMillis / 1000;
+    forceScreenDraw = false;
+    drawRunScreen();
+  }
+
+  // Write data to sd card
+  if (collectingData && runFile && !copyingFiles){
+    if (currentMillis - lastMillis <= sampleRate)
+      return;
+
     runFile.print(initialMillisecondOfDay + currentMillis);
     runFile.print(',');
     runFile.println(analogRead(A0));
     
     lastMillis = currentMillis;
   }
-
-  if (lastSecond != currentMillis / 1000){
-    lastSecond = currentMillis / 1000;
-    drawRunScreen();
-  }
 }
 
-void toggleLogging(){
-  collectingData = !collectingData;
-  digitalWrite(LOGGING_LED, collectingData);
-  if(collectingData)
-    startDataCollection();
-  else
+void toggleLogging(){  
+  if(collectingData){
     stopDataCollection();
+    collectingData = false;
+  }
+  else{
+    startDataCollection();
+    collectingData = true;
+  }
+
+  digitalWrite(LOGGING_LED, collectingData);
+  forceScreenDraw = true;
 }
 
 void startDataCollection(){
@@ -185,9 +195,11 @@ void startDataCollection(){
     digitalWrite(HALT_LED, LOW);
   }
 
+  // Ensure the file address exists
   if (!SD.exists(fileAddress))
       SD.mkdir(fileAddress);
 
+  // Open/create run file
   runFile = SD.open(fileAddress + "RUN" + String(runIndex) + FILE_EXTENSION, FILE_WRITE);
   
   // Write headers if no data is present in the file
@@ -204,42 +216,39 @@ void stopDataCollection(){
     digitalWrite(HALT_LED, LOW);
   }
 
+  // Close the run file if one exists
   if (runFile)
     runFile.close();
 }
 
 void startNewRun(bool trashLastRun){
-  // Verify an sd card is mounted
-  if (!sdCardMounted()){
-    customDrawScreen("SD ERROR:", "NO CARD DETECTED");
-    digitalWrite(HALT_LED, HIGH);
-    while(!sdCardMounted());
-    digitalWrite(HALT_LED, LOW);
-  }
-
-  if (runFile)
-    runFile.close();
+  // Stop collecting data
+  stopDataCollection();
 
   if (trashLastRun){
     customDrawScreen("TRASHING DATA", "PLEASE WAIT...");
     digitalWrite(HALT_LED, HIGH);
     copyingFiles = true;
 
+    // Re-open run file in read mode
+    String currentRunFileAddress = fileAddress + "RUN" + String(runIndex) + FILE_EXTENSION;
+    File currentRunFile = SD.open(currentRunFileAddress, FILE_READ);
+
     // Create trash folder if not created already
     if (!SD.exists(TRASH_FOLDER_ADDRESS + fileAddress))
       SD.mkdir(TRASH_FOLDER_ADDRESS + fileAddress);
 
-    String currentRunFileAddress = fileAddress + "RUN" + String(runIndex) + FILE_EXTENSION;
+    // Create new duplicate run file in trash folder
     String duplicateRunFileAddress = TRASH_FOLDER_ADDRESS + currentRunFileAddress;
-    
-    File currentRunFile = SD.open(currentRunFileAddress, FILE_READ);
     File duplicateRunFile = SD.open(duplicateRunFileAddress, FILE_WRITE);
 
+    // Copy and paste data from original file to duplicate
     size_t data;
     uint8_t buf[64];
     while ((data = currentRunFile.read(buf, sizeof(buf))) > 0)
       duplicateRunFile.write(buf, data);
     
+    // Close all files
     currentRunFile.close();
     duplicateRunFile.close();
     SD.remove(currentRunFileAddress);
