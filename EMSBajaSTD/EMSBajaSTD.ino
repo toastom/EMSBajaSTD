@@ -32,8 +32,7 @@ const String  CODE_VERSION         = "0.4.5";
 const String  FILE_EXTENSION       = ".CSV";
 const String  TRASH_FOLDER_ADDRESS = "TRASH/";
 const String  RUN_FILE_HEADER      = "TIME ms, A";
-const int     BAD_DATA_HOLD_TIME   = 2000;
-const int     BUTTON_DEBOUNCE_TIME = 100;
+const int     BAD_DATA_HOLD_TIME   = 2500;
 const int     LCD_WIDTH            = 16;
 const int     LCD_HEIGHT           = 2;
 
@@ -44,15 +43,15 @@ RTC_PCF8523   rtc;
 // Variables -------------------------------------------------------
 unsigned long currentMillis;
 unsigned long lastMillis;
-unsigned long newRunButtonHoldInitialTime;
+unsigned long prevHoldTime;
 unsigned long initialMillisecondOfDay;
 String        fileAddress;
 File          runFile;
 bool          copyingFiles;
-volatile bool collectingData = false;
-bool          newRunButtonIsPressedDown;
-bool          loggingButtonIsPressedDown;
-bool          forceScreenDraw;
+volatile bool collectingData;
+bool          currentRunButtonState;
+bool          currentLoggingButtonState;
+volatile bool forceScreenDraw;
 int           sampleRate;
 int           lastSecond;
 int           runIndex;
@@ -67,8 +66,8 @@ void setup() {
   pinMode(HALT_LED, OUTPUT);
   pinMode(LOGGING_BUTTON, INPUT);
   pinMode(NEW_RUN_BUTTON, INPUT);
-  attachInterrupt(digitalPinToInterrupt(LOGGING_BUTTON), toggleLogging, CHANGE);
-  //attachInterrupt(digitalPinToInterrupt(NEW_RUN_BUTTON), newRun, FALLING);
+  //attachInterrupt(digitalPinToInterrupt(LOGGING_BUTTON), toggleLogging, CHANGE);
+  //attachInterrupt(digitalPinToInterrupt(NEW_RUN_BUTTON), nextRun, RISING);
   
   // Start up screen 
   customDrawScreen("HELLO, EMS BAJA", "VERSION " + CODE_VERSION);
@@ -145,6 +144,9 @@ void setup() {
   // Cache exact millisecond of the day
   initialMillisecondOfDay = (3600000 * rtcHour) + (60000 * rtcMinute) + (1000 * rtcSecond);
 
+  collectingData = false;
+  forceScreenDraw = false;
+
   // Start the first run
   startNewRun(false);
 }
@@ -159,6 +161,50 @@ void loop() {
     drawRunScreen();
   }
 
+  // Switches are active low
+  bool isRunButtonPressed = !digitalRead(NEW_RUN_BUTTON);
+  bool isLoggingButtonPressed = !digitalRead(LOGGING_BUTTON);
+  
+  // Next run button
+  if (isRunButtonPressed && !currentRunButtonState){
+    currentRunButtonState = true;
+    prevHoldTime = millis();
+  }
+  else if (!isRunButtonPressed && currentRunButtonState && !collectingData){
+    currentRunButtonState = false;
+    runIndex++;
+    startNewRun(false);
+  }
+
+  // Hold the run button to clear the last run
+  if (isRunButtonPressed && currentRunButtonState){
+    if ((currentMillis - prevHoldTime) > BAD_DATA_HOLD_TIME){
+      startNewRun(true);
+      currentRunButtonState = false;
+    }
+  }
+
+   // Logging button
+  if (isLoggingButtonPressed && !currentLoggingButtonState){
+    currentLoggingButtonState = true;
+  }
+  else if (!isLoggingButtonPressed && currentLoggingButtonState){
+    currentLoggingButtonState = false;
+
+    // Inverted because the switch is active low
+    if(collectingData){
+      stopDataCollection();
+      collectingData = false;
+    }
+    else{
+      startDataCollection();
+      collectingData = true;
+    }
+
+    digitalWrite(LOGGING_LED, collectingData);
+    forceScreenDraw = true;
+  }
+
   // Write data to sd card
   if (collectingData && runFile && !copyingFiles){
     if (currentMillis - lastMillis <= sampleRate)
@@ -166,13 +212,15 @@ void loop() {
 
     runFile.print(initialMillisecondOfDay + currentMillis);
     runFile.print(',');
-    runFile.println(analogRead(A0));
+    runFile.println(analogRead(A2)); // just log A2 right now for a test
     
     lastMillis = currentMillis;
   }
 }
 
-void toggleLogging(){  
+/*
+void toggleLogging(){
+  // Inverted because the switch is active low
   if(collectingData){
     stopDataCollection();
     collectingData = false;
@@ -185,6 +233,7 @@ void toggleLogging(){
   digitalWrite(LOGGING_LED, collectingData);
   forceScreenDraw = true;
 }
+*/
 
 void startDataCollection(){
   // Verify an sd card is mounted
@@ -257,7 +306,7 @@ void startNewRun(bool trashLastRun){
     copyingFiles = false;
   }
 
-  runIndex++;
+  //runIndex++;
   drawRunScreen();
 }
 
