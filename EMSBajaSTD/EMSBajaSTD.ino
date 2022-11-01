@@ -1,12 +1,3 @@
-/*
-  Still very buggy but the logging switch is implemented using an interrupt now
-  KNOWN BUG: System (or at least the display) sometimes freezes after sometimes toggling logging on/off
-  KNOWN BUG: Random "SD CARD ERROR" out of nowhere, but no red error light to go with it. Reset is the only way to get rid of it
-
-  The new run button has yet to be swapped over to an interrupt. This might take some work.
-*/
-
-
 // Libraries -------------------------------------------------------
 #include <LiquidCrystal.h>
 #include <RTClib.h>
@@ -66,8 +57,6 @@ void setup() {
   pinMode(HALT_LED, OUTPUT);
   pinMode(LOGGING_BUTTON, INPUT);
   pinMode(NEW_RUN_BUTTON, INPUT);
-  //attachInterrupt(digitalPinToInterrupt(LOGGING_BUTTON), toggleLogging, CHANGE);
-  //attachInterrupt(digitalPinToInterrupt(NEW_RUN_BUTTON), nextRun, RISING);
   
   // Start up screen 
   customDrawScreen("HELLO, EMS BAJA", "VERSION " + CODE_VERSION);
@@ -184,14 +173,13 @@ void loop() {
     }
   }
 
-   // Logging button
+  // Logging button
   if (isLoggingButtonPressed && !currentLoggingButtonState){
     currentLoggingButtonState = true;
   }
   else if (!isLoggingButtonPressed && currentLoggingButtonState){
     currentLoggingButtonState = false;
 
-    // Inverted because the switch is active low
     if(collectingData){
       stopDataCollection();
       collectingData = false;
@@ -212,28 +200,11 @@ void loop() {
 
     runFile.print(initialMillisecondOfDay + currentMillis);
     runFile.print(',');
-    runFile.println(analogRead(A2)); // just log A2 right now for a test
+    runFile.println(analogRead(A2));
     
     lastMillis = currentMillis;
   }
 }
-
-/*
-void toggleLogging(){
-  // Inverted because the switch is active low
-  if(collectingData){
-    stopDataCollection();
-    collectingData = false;
-  }
-  else{
-    startDataCollection();
-    collectingData = true;
-  }
-
-  digitalWrite(LOGGING_LED, collectingData);
-  forceScreenDraw = true;
-}
-*/
 
 void startDataCollection(){
   // Verify an sd card is mounted
@@ -306,7 +277,6 @@ void startNewRun(bool trashLastRun){
     copyingFiles = false;
   }
 
-  //runIndex++;
   drawRunScreen();
 }
 
