@@ -8,7 +8,7 @@
 #define       NEW_RUN_BUTTON       3
 #define       LOGGING_LED          4
 #define       HALT_LED             5
-#define       SD_SC                10
+#define       SD_CS                10
 #define       LCD_RS               22
 #define       LCD_RW               23
 #define       LCD_EN               24
@@ -18,12 +18,11 @@
 #define       LCD_DB7              28
 
 // Configuration ---------------------------------------------------
-const String  CODE_VERSION         = "0.4.2";
+const String  CODE_VERSION         = "0.4.5";
 const String  FILE_EXTENSION       = ".CSV";
 const String  TRASH_FOLDER_ADDRESS = "TRASH/";
 const String  RUN_FILE_HEADER      = "TIME ms, A";
-const int     BAD_DATA_HOLD_TIME   = 2000;
-const int     BUTTON_DEBOUNCE_TIME = 100;
+const int     BAD_DATA_HOLD_TIME   = 2500;
 const int     LCD_WIDTH            = 16;
 const int     LCD_HEIGHT           = 2;
 
@@ -34,14 +33,15 @@ RTC_PCF8523   rtc;
 // Variables -------------------------------------------------------
 unsigned long currentMillis;
 unsigned long lastMillis;
-unsigned long newRunButtonHoldInitialTime;
+unsigned long prevHoldTime;
 unsigned long initialMillisecondOfDay;
 String        fileAddress;
 File          runFile;
 bool          copyingFiles;
-bool          collectingData;
-bool          newRunButtonIsPressedDown;
-bool          loggingButtonIsPressedDown;
+volatile bool collectingData;
+bool          currentRunButtonState;
+bool          currentLoggingButtonState;
+volatile bool forceScreenDraw;
 int           sampleRate;
 int           lastSecond;
 int           runIndex;
@@ -49,7 +49,7 @@ int           runIndex;
 // Code ------------------------------------------------------------
 void setup() {
   // Serial setup
-  // Serial.begin(9600);
+  //Serial.begin(9600);
 
   // Pin setup
   pinMode(LOGGING_LED, OUTPUT);
@@ -62,7 +62,7 @@ void setup() {
   delay(2000);
 
   // Set the sample rate
-  if (!digitalRead(NEW_RUN_BUTTON)){
+  if (digitalRead(NEW_RUN_BUTTON)){
     sampleRate = 1;
     customDrawScreen("SAMPLE RATE:", "1000/SECOND..1MS");
   }
@@ -131,65 +131,80 @@ void setup() {
   // Cache exact millisecond of the day
   initialMillisecondOfDay = (3600000 * rtcHour) + (60000 * rtcMinute) + (1000 * rtcSecond);
 
+  collectingData = false;
+  forceScreenDraw = false;
+
   // Start the first run
   startNewRun(false);
 }
 
 void loop() {
   currentMillis = millis();
-  if (currentMillis - lastMillis < sampleRate || copyingFiles)
-    return;
   
-  if (collectingData && runFile){
-    runFile.print(initialMillisecondOfDay + currentMillis);
-    runFile.print(',');
-    runFile.println(analogRead(A0));
-    
-    lastMillis = currentMillis;
+  // Update clock every second
+  if (lastSecond != currentMillis / 1000 || forceScreenDraw){
+    lastSecond = currentMillis / 1000;
+    forceScreenDraw = false;
+    drawRunScreen();
   }
 
-  bool newRunButtonPressed = digitalRead(NEW_RUN_BUTTON);
-  bool loggingButtonPressed = digitalRead(LOGGING_BUTTON);
-
-  // New run button
-  if (newRunButtonPressed && !newRunButtonIsPressedDown){         
-    newRunButtonIsPressedDown = true;
-    newRunButtonHoldInitialTime = currentMillis;
+  // Switches are active low
+  bool isRunButtonPressed = !digitalRead(NEW_RUN_BUTTON);
+  bool isLoggingButtonPressed = !digitalRead(LOGGING_BUTTON);
+  
+  // Next run button
+  if (isRunButtonPressed && !currentRunButtonState){
+    currentRunButtonState = true;
+    prevHoldTime = millis();
   }
-  else if (!newRunButtonPressed && newRunButtonIsPressedDown){    
-    newRunButtonIsPressedDown = false;
+  else if (!isRunButtonPressed && currentRunButtonState && !collectingData){
+    currentRunButtonState = false;
+    runIndex++;
     startNewRun(false);
   }
 
-  if (newRunButtonPressed && newRunButtonIsPressedDown){          
-    if (currentMillis - newRunButtonHoldInitialTime > BAD_DATA_HOLD_TIME){
+  // Hold the run button to clear the last run
+  if (isRunButtonPressed && currentRunButtonState){
+    if ((currentMillis - prevHoldTime) > BAD_DATA_HOLD_TIME){
       startNewRun(true);
-      newRunButtonIsPressedDown = false;
+      currentRunButtonState = false;
     }
   }
 
   // Logging button
-  if (loggingButtonPressed && !loggingButtonIsPressedDown)
-    loggingButtonIsPressedDown = true;
-  else if (!loggingButtonPressed && loggingButtonIsPressedDown){
-    loggingButtonIsPressedDown = false;
-    
-    if (!collectingData)
-      startDataCollection();
-    else
+  if (isLoggingButtonPressed && !currentLoggingButtonState){
+    currentLoggingButtonState = true;
+  }
+  else if (!isLoggingButtonPressed && currentLoggingButtonState){
+    currentLoggingButtonState = false;
+
+    if(collectingData){
       stopDataCollection();
+      collectingData = false;
+    }
+    else{
+      startDataCollection();
+      collectingData = true;
+    }
+
+    digitalWrite(LOGGING_LED, collectingData);
+    forceScreenDraw = true;
   }
 
-  if (lastSecond != currentMillis / 1000){
-    lastSecond = currentMillis / 1000;
-    drawRunScreen();
+  // Write data to sd card
+  if (collectingData && runFile && !copyingFiles){
+    if (currentMillis - lastMillis <= sampleRate)
+      return;
+
+    runFile.print(initialMillisecondOfDay + currentMillis);
+    runFile.print(',');
+    runFile.println(analogRead(A2));
+    
+    lastMillis = currentMillis;
   }
 }
 
 void startDataCollection(){
-  if (collectingData)
-    return;
-
   // Verify an sd card is mounted
   if (!sdCardMounted()){
     customDrawScreen("SD ERROR:", "NO CARD DETECTED");
@@ -198,26 +213,19 @@ void startDataCollection(){
     digitalWrite(HALT_LED, LOW);
   }
 
+  // Ensure the file address exists
   if (!SD.exists(fileAddress))
       SD.mkdir(fileAddress);
 
+  // Open/create run file
   runFile = SD.open(fileAddress + "RUN" + String(runIndex) + FILE_EXTENSION, FILE_WRITE);
   
   // Write headers if no data is present in the file
   if (runFile.peek() == -1)
     runFile.println(RUN_FILE_HEADER);
-  
-  collectingData = true;
-
-  // Refresh screen and status LED
-  drawRunScreen();
-  digitalWrite(LOGGING_LED, HIGH);
 }
 
 void stopDataCollection(){
-  if (!collectingData)
-    return;
-
   // Verify an sd card is mounted
   if (!sdCardMounted()){
     customDrawScreen("SD ERROR:", "NO CARD DETECTED");
@@ -226,25 +234,13 @@ void stopDataCollection(){
     digitalWrite(HALT_LED, LOW);
   }
 
+  // Close the run file if one exists
   if (runFile)
     runFile.close();
-  
-  collectingData = false;
-
-  // Refresh screen and status LED
-  drawRunScreen();
-  digitalWrite(LOGGING_LED, LOW);
 }
 
 void startNewRun(bool trashLastRun){
-  // Verify an sd card is mounted
-  if (!sdCardMounted()){
-    customDrawScreen("SD ERROR:", "NO CARD DETECTED");
-    digitalWrite(HALT_LED, HIGH);
-    while(!sdCardMounted());
-    digitalWrite(HALT_LED, LOW);
-  }
-
+  // Stop collecting data
   stopDataCollection();
 
   if (trashLastRun){
@@ -252,21 +248,25 @@ void startNewRun(bool trashLastRun){
     digitalWrite(HALT_LED, HIGH);
     copyingFiles = true;
 
+    // Re-open run file in read mode
+    String currentRunFileAddress = fileAddress + "RUN" + String(runIndex) + FILE_EXTENSION;
+    File currentRunFile = SD.open(currentRunFileAddress, FILE_READ);
+
     // Create trash folder if not created already
     if (!SD.exists(TRASH_FOLDER_ADDRESS + fileAddress))
       SD.mkdir(TRASH_FOLDER_ADDRESS + fileAddress);
 
-    String currentRunFileAddress = fileAddress + "RUN" + String(runIndex) + FILE_EXTENSION;
+    // Create new duplicate run file in trash folder
     String duplicateRunFileAddress = TRASH_FOLDER_ADDRESS + currentRunFileAddress;
-    
-    File currentRunFile = SD.open(currentRunFileAddress, FILE_READ);
     File duplicateRunFile = SD.open(duplicateRunFileAddress, FILE_WRITE);
 
+    // Copy and paste data from original file to duplicate
     size_t data;
     uint8_t buf[64];
-    while ((data = currentRunFile.read(buf, sizeof(buf))) > 0) 
+    while ((data = currentRunFile.read(buf, sizeof(buf))) > 0)
       duplicateRunFile.write(buf, data);
     
+    // Close all files
     currentRunFile.close();
     duplicateRunFile.close();
     SD.remove(currentRunFileAddress);
@@ -275,7 +275,6 @@ void startNewRun(bool trashLastRun){
     copyingFiles = false;
   }
 
-  runIndex++;
   drawRunScreen();
 }
 
@@ -315,7 +314,5 @@ void customDrawScreen(String top, String bottom){
 }
 
 bool sdCardMounted(){
-  return SD.begin(SD_SC);
-  customDrawScreen("SD ERROR:", "NO CARD DETECTED");
-  while(SD.begin(SD_SC));
+  return SD.begin(SD_CS);
 }
