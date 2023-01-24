@@ -1,3 +1,4 @@
+// Libraries -------------------------------------------------------
 #include <LiquidCrystal.h>
 #include <RTClib.h>
 #include <SPI.h>
@@ -100,9 +101,10 @@ void setup() {
     digitalWrite(HALT_LED, LOW);
   }
 
-  // Get current time
+  // Cache file address
   DateTime now = rtc.now();
 
+  // Year, Month, Day
   String rtcYearStr = String(now.year());
   rtcYearStr = rtcYearStr.substring(2, 4);
   
@@ -112,6 +114,7 @@ void setup() {
   String rtcDayStr = '0' + String(now.day());
   rtcDayStr = rtcDayStr.substring(rtcDayStr.length() - 2, 3);
 
+  // Hour, Minute, Second
   int rtcHour = now.hour();
   int rtcMinute = now.minute();
   int rtcSecond = now.second();
@@ -125,7 +128,6 @@ void setup() {
   String rtcSecondStr = '0' + String(rtcSecond);
   rtcSecondStr = rtcSecondStr.substring(rtcSecondStr.length() - 2, 3);
   
-  // Cache file address
   fileAddress = rtcMonthStr + '-' + rtcDayStr + '-' + rtcYearStr + '/' + rtcHourStr + '-' + rtcMinuteStr + '-' + rtcSecondStr + '/';
 
   // Cache exact millisecond of the day
