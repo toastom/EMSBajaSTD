@@ -1,21 +1,26 @@
+// Libraries -------------------------------------------------------
 #include <LiquidCrystal.h>
 #include <RTClib.h>
 #include <SPI.h>
 #include <SD.h>
 
 // Constants -------------------------------------------------------
-#define       LOGGING_BUTTON       2
-#define       NEW_RUN_BUTTON       3
-#define       LOGGING_LED          4
-#define       HALT_LED             5
-#define       SD_CS                10
-#define       LCD_RS               22
-#define       LCD_RW               23
-#define       LCD_EN               24
-#define       LCD_DB4              25
-#define       LCD_DB5              26
-#define       LCD_DB6              27
-#define       LCD_DB7              28
+#define LOGGING_BUTTON 2
+#define NEW_RUN_BUTTON 3
+#define LOGGING_LED    5
+#define HALT_LED       4
+#define SD_CS          10
+#define LCD_RS         23
+#define LCD_RW         25
+#define LCD_EN         27
+#define LCD_DB4        29
+#define LCD_DB5        31
+#define LCD_DB6        33
+#define LCD_DB7        35
+#define SP1            A0
+#define SP2            A1
+#define SP3            A2
+#define SP4            A3    
 
 // Configuration ---------------------------------------------------
 const String  CODE_VERSION         = "0.4.5";
@@ -100,9 +105,10 @@ void setup() {
     digitalWrite(HALT_LED, LOW);
   }
 
-  // Get current time
+  // Cache file address
   DateTime now = rtc.now();
 
+  // Year, Month, Day
   String rtcYearStr = String(now.year());
   rtcYearStr = rtcYearStr.substring(2, 4);
   
@@ -112,6 +118,7 @@ void setup() {
   String rtcDayStr = '0' + String(now.day());
   rtcDayStr = rtcDayStr.substring(rtcDayStr.length() - 2, 3);
 
+  // Hour, Minute, Second
   int rtcHour = now.hour();
   int rtcMinute = now.minute();
   int rtcSecond = now.second();
@@ -125,7 +132,6 @@ void setup() {
   String rtcSecondStr = '0' + String(rtcSecond);
   rtcSecondStr = rtcSecondStr.substring(rtcSecondStr.length() - 2, 3);
   
-  // Cache file address
   fileAddress = rtcMonthStr + '-' + rtcDayStr + '-' + rtcYearStr + '/' + rtcHourStr + '-' + rtcMinuteStr + '-' + rtcSecondStr + '/';
 
   // Cache exact millisecond of the day
@@ -174,18 +180,16 @@ void loop() {
   // Logging button
   if (isLoggingButtonPressed && !currentLoggingButtonState){
     currentLoggingButtonState = true;
+    startDataCollection();
+    collectingData = true;
+
+    digitalWrite(LOGGING_LED, collectingData);
+    forceScreenDraw = true;
   }
   else if (!isLoggingButtonPressed && currentLoggingButtonState){
     currentLoggingButtonState = false;
-
-    if(collectingData){
-      stopDataCollection();
-      collectingData = false;
-    }
-    else{
-      startDataCollection();
-      collectingData = true;
-    }
+    stopDataCollection();
+    collectingData = false;
 
     digitalWrite(LOGGING_LED, collectingData);
     forceScreenDraw = true;
@@ -198,7 +202,13 @@ void loop() {
 
     runFile.print(initialMillisecondOfDay + currentMillis);
     runFile.print(',');
-    runFile.println(analogRead(A2));
+    runFile.print(analogRead(SP1));
+    runFile.print(',');
+    runFile.print(analogRead(SP2));
+    runFile.print(',');
+    runFile.print(analogRead(SP3));
+    runFile.print(',');
+    runFile.println(analogRead(SP4));
     
     lastMillis = currentMillis;
   }
@@ -214,8 +224,8 @@ void startDataCollection(){
   }
 
   // Ensure the file address exists
-  if (!SD.exists(fileAddress))
-      SD.mkdir(fileAddress);
+  if(!SD.exists(fileAddress))
+    SD.mkdir(fileAddress);
 
   // Open/create run file
   runFile = SD.open(fileAddress + "RUN" + String(runIndex) + FILE_EXTENSION, FILE_WRITE);
