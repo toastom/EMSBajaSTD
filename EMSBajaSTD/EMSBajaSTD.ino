@@ -5,18 +5,22 @@
 #include <SD.h>
 
 // Constants -------------------------------------------------------
-#define       LOGGING_BUTTON       2
-#define       NEW_RUN_BUTTON       3
-#define       LOGGING_LED          4
-#define       HALT_LED             5
-#define       SD_CS                10
-#define       LCD_RS               22
-#define       LCD_RW               23
-#define       LCD_EN               24
-#define       LCD_DB4              25
-#define       LCD_DB5              26
-#define       LCD_DB6              27
-#define       LCD_DB7              28
+#define LOGGING_BUTTON 2
+#define NEW_RUN_BUTTON 3
+#define LOGGING_LED    5
+#define HALT_LED       4
+#define SD_CS          10
+#define LCD_RS         23
+#define LCD_RW         25
+#define LCD_EN         27
+#define LCD_DB4        29
+#define LCD_DB5        31
+#define LCD_DB6        33
+#define LCD_DB7        35
+#define SP1            A0
+#define SP2            A1
+#define SP3            A2
+#define SP4            A3    
 
 // Configuration ---------------------------------------------------
 const String  CODE_VERSION         = "0.4.5";
@@ -200,7 +204,13 @@ void loop() {
 
     runFile.print(initialMillisecondOfDay + currentMillis);
     runFile.print(',');
-    runFile.println(analogRead(A2));
+    runFile.print(analogRead(SP1));
+    runFile.print(',');
+    runFile.print(analogRead(SP2));
+    runFile.print(',');
+    runFile.print(analogRead(SP3));
+    runFile.print(',');
+    runFile.println(analogRead(SP4));
     
     lastMillis = currentMillis;
   }
@@ -216,8 +226,8 @@ void startDataCollection(){
   }
 
   // Ensure the file address exists
-  if (!SD.exists(fileAddress))
-      SD.mkdir(fileAddress);
+  if(!SD.exists(fileAddress))
+    SD.mkdir(fileAddress);
 
   // Open/create run file
   runFile = SD.open(fileAddress + "RUN" + String(runIndex) + FILE_EXTENSION, FILE_WRITE);
