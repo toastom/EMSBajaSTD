@@ -180,18 +180,16 @@ void loop() {
   // Logging button
   if (isLoggingButtonPressed && !currentLoggingButtonState){
     currentLoggingButtonState = true;
+    startDataCollection();
+    collectingData = true;
+
+    digitalWrite(LOGGING_LED, collectingData);
+    forceScreenDraw = true;
   }
   else if (!isLoggingButtonPressed && currentLoggingButtonState){
     currentLoggingButtonState = false;
-
-    if(collectingData){
-      stopDataCollection();
-      collectingData = false;
-    }
-    else{
-      startDataCollection();
-      collectingData = true;
-    }
+    stopDataCollection();
+    collectingData = false;
 
     digitalWrite(LOGGING_LED, collectingData);
     forceScreenDraw = true;
