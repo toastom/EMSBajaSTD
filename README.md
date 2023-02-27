@@ -32,16 +32,16 @@ Some of our testing may include
 - Data logging enable/disable
 - Button to move to the next run
 - Save data with timestamp to a csv file when logging is turned off
-- Hardware noise filtering for analog inputs A2-A5
+- Hardware noise filtering for analog inputs A0 - A3
 - Various status LEDs
 
 ### Project Roadmap
 To do list for implementing basic functionality and new features. Mark as done when the feature has been fully implemented.
  - [X] Basic device status display on the LCD screen
- - [ ] Enable/disable data logging state via a toggle switch
- - [ ] Go to the next run via a button press
- - [ ] Log sensor data to a file on the SD card
- - [ ] Mark a previous run as junk or having bad data
+ - [X] Enable/disable data logging state via a toggle switch
+ - [X] Go to the next run via a button press
+ - [X] Log sensor data to a file on the SD card
+ - [X] Mark a previous run as junk or having bad data
 
 
 ### Best practices for Git and version control
