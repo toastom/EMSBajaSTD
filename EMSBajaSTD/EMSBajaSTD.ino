@@ -27,7 +27,7 @@ const String  CODE_VERSION         = "0.4.5";
 const String  FILE_EXTENSION       = ".CSV";
 const String  TRASH_FOLDER_ADDRESS = "TRASH/";
 const String  RUN_FILE_HEADER      = "TIME ms, A";
-const int     BAD_DATA_HOLD_TIME   = 2500;
+const int     BAD_DATA_HOLD_TIME   = 10000;
 const int     LCD_WIDTH            = 16;
 const int     LCD_HEIGHT           = 2;
 
@@ -171,7 +171,7 @@ void loop() {
 
   // Hold the run button to clear the last run
   if (isRunButtonPressed && currentRunButtonState){
-    if ((currentMillis - prevHoldTime) > BAD_DATA_HOLD_TIME){
+    if ((millis() - prevHoldTime) > BAD_DATA_HOLD_TIME){
       startNewRun(true);
       currentRunButtonState = false;
     }
