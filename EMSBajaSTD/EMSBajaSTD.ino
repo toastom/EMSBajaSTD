@@ -144,7 +144,14 @@ void setup() {
   startNewRun(false);
 }
 
-void loop() {
+void loop() { 
+  //SD initialization
+  if (!sdCardMounted()){
+    customDrawScreen("SD ERROR:", "NO CARD DETECTED");
+    digitalWrite(HALT_LED, HIGH);
+    while(!sdCardMounted());
+    digitalWrite(HALT_LED, LOW);
+  }
   currentMillis = millis();
   
   // Update clock every second
