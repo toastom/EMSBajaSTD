@@ -180,7 +180,7 @@ void loop() {
   // Logging button
   if (isLoggingButtonPressed && !currentLoggingButtonState){
     currentLoggingButtonState = true;
-    startDataCollection();
+    openDataFile();
     collectingData = true;
 
     digitalWrite(LOGGING_LED, collectingData);
@@ -188,19 +188,21 @@ void loop() {
   }
   else if (!isLoggingButtonPressed && currentLoggingButtonState){
     currentLoggingButtonState = false;
-    stopDataCollection();
+    saveDataFile();
     collectingData = false;
 
     digitalWrite(LOGGING_LED, collectingData);
     forceScreenDraw = true;
   }
 
-  // Write data to sd card
+  // Write new line to sd card
   if (collectingData && runFile && !copyingFiles){
-    if (currentMillis - lastMillis <= sampleRate)
+    if (millis() - lastMillis <= sampleRate)
       return;
 
-    runFile.print(initialMillisecondOfDay + currentMillis);
+    // revisit this time format for the data file in the future
+    // not exactly human-readable
+    runFile.print(initialMillisecondOfDay + millis());
     runFile.print(',');
     runFile.print(analogRead(SP1));
     runFile.print(',');
@@ -210,11 +212,11 @@ void loop() {
     runFile.print(',');
     runFile.println(analogRead(SP4));
     
-    lastMillis = currentMillis;
+    lastMillis = millis();
   }
 }
 
-void startDataCollection(){
+void openDataFile(){
   // Verify an sd card is mounted
   if (!sdCardMounted()){
     customDrawScreen("SD ERROR:", "NO CARD DETECTED");
@@ -235,7 +237,7 @@ void startDataCollection(){
     runFile.println(FILE_HEADER);
 }
 
-void stopDataCollection(){
+void saveDataFile(){
   // Verify an sd card is mounted
   if (!sdCardMounted()){
     customDrawScreen("SD ERROR:", "NO CARD DETECTED");
@@ -251,7 +253,7 @@ void stopDataCollection(){
 
 void startNewRun(bool trashLastRun){
   // Stop collecting data
-  stopDataCollection();
+  saveDataFile();
 
   if (trashLastRun)
     trashLastFile();
@@ -267,6 +269,17 @@ void trashLastFile(){
   // Re-open run file in read mode
   String currFileStr = fileStr + "RUN" + String(runIndex) + FILE_EXT;
   File readFile = SD.open(currFileStr, FILE_READ);
+  
+  if(!readFile){
+    customDrawScreen("ERROR: FILE DNE", "FAIL TRASH RUN" + String(runIndex));
+    digitalWrite(HALT_LED, HIGH);
+    delay(5000);
+    digitalWrite(HALT_LED, LOW);
+    readFile.close();
+    copyingFiles = false;
+
+    return;
+  }
 
   // Create trash folder if not created already
   if (!SD.exists(TRASH_STR + fileStr))
