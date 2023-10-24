@@ -111,7 +111,7 @@ void setup() {
   // Year, Month, Day
   String rtcYearStr = String(now.year());
   rtcYearStr = rtcYearStr.substring(2, 4);
-  
+ 
   String rtcMonthStr = '0' + String(now.month());
   rtcMonthStr = rtcMonthStr.substring(rtcMonthStr.length() - 2, 3);
 
@@ -289,6 +289,8 @@ void trashLastFile(){
 
   digitalWrite(HALT_LED, LOW);
   copyingFiles = false;
+  // Decrease run counter so we don't skip run counts after trashing the last file
+  runIndex--;
 }
 
 void drawRunScreen(){
