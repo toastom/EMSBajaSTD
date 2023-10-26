@@ -36,7 +36,8 @@ LiquidCrystal lcd(LCD_RS, LCD_RW, LCD_EN, LCD_DB4, LCD_DB5, LCD_DB6, LCD_DB7);
 RTC_PCF8523   rtc;
 
 // Variables -------------------------------------------------------
-unsigned long currentMillis;
+//unsigned long currentMillis;
+unsigned long logStartTime;
 unsigned long lastMillis;
 unsigned long prevHoldTime;
 unsigned long initialMillisecondOfDay;
@@ -48,7 +49,7 @@ bool          currentRunButtonState;
 bool          currentLoggingButtonState;
 volatile bool forceScreenDraw;
 int           sampleRate;
-int           lastSecond;
+unsigned int  lastSecond;
 int           runIndex;
 
 // Code ------------------------------------------------------------
@@ -66,6 +67,9 @@ void setup() {
   customDrawScreen("HELLO, EMS BAJA", "VERSION " + CODE_VERSION);
   delay(2000);
 
+  customDrawScreen("SAMPLE RATE:", "1000/SECOND..1MS");  
+  /* Removed because limiting sample rate was causing major decreases in actual sample rate.
+     Like a third of what we wanted at the ideal 1000 s / sec
   // Set the sample rate
   if (digitalRead(NEW_RUN_BUTTON)){
     sampleRate = 1;
@@ -75,6 +79,7 @@ void setup() {
     sampleRate = 10;
     customDrawScreen("SAMPLE RATE:", "100/SECOND..10MS");
   }
+  */
   delay(2000);
 
   // SD initialization
@@ -145,7 +150,7 @@ void setup() {
 }
 
 void loop() {
-  currentMillis = millis();
+  unsigned long currentMillis = millis();
   
   // Update clock every second
   if (lastSecond != currentMillis / 1000 || forceScreenDraw){
@@ -197,12 +202,16 @@ void loop() {
 
   // Write new line to sd card
   if (collectingData && runFile && !copyingFiles){
+    // Test removal to see if this affects sample rate
+    /* Yes, WAY closer to 1 s / ms now. Still has semi-random misses though,
+    and occasionally a second data row for the same ms, but that's acceptable.
+    Close to 90% of the way to 1 s / ms now. I can take that.
     if (millis() - lastMillis <= sampleRate)
       return;
+    */
 
-    // revisit this time format for the data file in the future
-    // not exactly human-readable
-    runFile.print(initialMillisecondOfDay + millis());
+    /*runFile.print(initialMillisecondOfDay + millis());
+    runFile.print(millis() - logStartTime);
     runFile.print(',');
     runFile.print(analogRead(SP1));
     runFile.print(',');
@@ -211,6 +220,20 @@ void loop() {
     runFile.print(analogRead(SP3));
     runFile.print(',');
     runFile.println(analogRead(SP4));
+    */
+
+    // Quick fix to make time format more human-readable
+    // also create a packet to write to the file all at once so as not to repeatedly
+    // call print more times than necessary
+
+    uint32_t time = millis() - logStartTime;
+    uint16_t sp1 = analogRead(SP1);
+    uint16_t sp2 = analogRead(SP2);
+    uint16_t sp3 = analogRead(SP3);
+    uint16_t sp4 = analogRead(SP4);
+    char data[32];
+    sprintf(data, "%lu,%u,%u,%u,%u", time, sp1, sp2, sp3, sp4);
+    runFile.println(data);
     
     lastMillis = millis();
   }
@@ -231,6 +254,7 @@ void openDataFile(){
 
   // Open/create run file
   runFile = SD.open(fileStr + "RUN" + String(runIndex) + FILE_EXT, FILE_WRITE);
+  logStartTime = millis();
   
   // Write headers if no data is present in the file
   if (runFile.peek() == -1)
